@@ -1,0 +1,178 @@
+---
+title: "Reproducible Research: Peer Assessment 1"
+author: "Bilal Hassan Nizami"
+output: 
+  html_document:
+    keep_md: true
+---
+
+```{r setup, include=FALSE}
+# This ensures all code chunks are visible in the final report
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Phase 1: Loading and preprocessing the data
+
+```{r}
+# 1. Load the data
+if(!file.exists("activity.csv")){
+    unzip("activity.zip")
+}
+activity <- read.csv("activity.csv")
+
+# 2. Process/transform the data
+activity$date <- as.Date(activity$date, format = "%Y-%m-%d")
+
+# Check the data
+head(activity)
+```
+
+## Phase 2: Analysis of Daily Steps and Activity Patterns
+
+**1. Mean total number of steps taken per day**
+
+For this part, the instructions say we can ignore the missing values (NA). We will aggregate the data by date.
+
+
+```{r}
+## Calculate the total number of steps taken per day
+total_steps_per_day <- aggregate(steps ~ date, data = activity, sum, na.rm = TRUE)
+
+## Make a histogram of the total number of steps taken each day
+hist(total_steps_per_day$steps, 
+     main = "Total Steps Taken per Day", 
+     xlab = "Steps", 
+     col = "steelblue", 
+     breaks = 20)
+
+## Calculate and report the mean and median
+mean_steps <- mean(total_steps_per_day$steps)
+median_steps <- median(total_steps_per_day$steps)
+```
+
+**2. The average daily activity pattern**
+
+Now we look at how active the individual is throughout the day by averaging each 5-minute interval across all days.
+
+
+```{r}
+## Calculate average steps per interval across all days
+avg_steps_per_interval <- aggregate(steps ~ interval, data = activity, mean, na.rm = TRUE)
+
+## Make a time series plot
+plot(avg_steps_per_interval$interval, avg_steps_per_interval$steps, 
+     type = "l", 
+     col = "darkred",
+     lwd = 2,
+     main = "Average Daily Activity Pattern",
+     xlab = "5-minute Interval", 
+     ylab = "Average Number of Steps")
+
+## Find the interval with the maximum number of steps
+max_interval <- avg_steps_per_interval[which.max(avg_steps_per_interval$steps), ]
+```
+
+## Phase 3: Imputing Missing Values
+
+**1. Calculate and report the total number of missing values**
+
+First, we find out exactly how many rows are missing step data.
+
+```{r}
+# Calculate total number of missing values
+total_nas <- sum(is.na(activity$steps))
+```
+
+**2. Strategy for imputing missing data**
+
+A simple but effective strategy is to replace each $NA$ with the mean for that specific 5-minute interval. We already calculated these means in Phase 2 (avg_steps_per_interval).
+
+**3. Create a new dataset with filled-in missing values**
+
+We will loop through the data (or use a join/merge) to replace $NA$s.
+
+```{r}
+# Create a new dataset by merging the original data with the interval means
+imputed_data <- activity
+
+for (i in 1:nrow(imputed_data)) {
+    if (is.na(imputed_data$steps[i])) {
+        # Find the index where the intervals match
+        interval_value <- imputed_data$interval[i]
+        steps_value <- avg_steps_per_interval[avg_steps_per_interval$interval == interval_value, ]$steps
+        # Replace NA with the average steps for that interval
+        imputed_data$steps[i] <- steps_value
+    }
+}
+```
+
+**4. Histogram and Impact Analysis**
+
+Now we recreate the histogram and recalculate the mean and median to see the impact.
+
+```{r}
+# Calculate total steps per day with imputed data
+total_steps_imputed <- aggregate(steps ~ date, data = imputed_data, sum)
+
+# Make a histogram
+hist(total_steps_imputed$steps, 
+     main = "Total Steps per Day (Imputed Data)", 
+     xlab = "Steps", 
+     col = "darkgreen", 
+     breaks = 20)
+
+# Calculate new mean and median
+mean_imputed <- mean(total_steps_imputed$steps)
+median_imputed <- median(total_steps_imputed$steps)
+```
+
+## Key Observations for the Report:
+
+**Mean:** Because we used the interval means to fill the gaps, the Mean will likely stay exactly the same ($10,766$).
+
+**Median:** The Median will usually shift slightly and often becomes equal to the Mean.
+
+**Impact:** Imputing the data increases the total daily number of steps for the days that were previously all $NA$, making the center of our histogram taller (higher frequency).
+
+## Phase 4: Weekdays vs. Weekends Patterns
+
+**1. Create a new factor variable**
+
+We need to tell R which dates are "Weekdays" and which are "Weekends." We use the weekdays() function for this.
+
+```{r}
+# Create a helper function to categorize the date
+day_type <- function(date) {
+    day <- weekdays(date)
+    if (day %in% c("Saturday", "Sunday")) {
+        return("weekend")
+    } else {
+        return("weekday")
+    }
+}
+
+# Apply the function to the imputed dataset
+imputed_data$day_type <- as.factor(sapply(imputed_data$date, day_type))
+```
+
+**2. Create the Panel Plot**
+
+We need to compare the average steps per interval for both categories. The lattice or ggplot2 libraries are perfect for "panel" (faceted) plots.
+
+```{r}
+# Calculate average steps by interval and day_type
+avg_steps_by_daytype <- aggregate(steps ~ interval + day_type, data = imputed_data, mean)
+
+# Load library for panel plotting
+library(lattice)
+
+# Create the panel plot
+xyplot(steps ~ interval | day_type, 
+       data = avg_steps_by_daytype, 
+       type = "l", 
+       layout = c(1, 2), 
+       main = "Average Steps: Weekdays vs. Weekends",
+       xlab = "5-minute Interval", 
+       ylab = "Number of Steps")
+```
+
